@@ -112,23 +112,26 @@
 
     (is (thrown? Exception (format-time* "1")))
     (is (thrown? Exception (format-time* "1")))
-    (is (thrown? Exception (format-time* "111")))
+    (is (thrown? Exception (format-time* "111"))))
 
-    )
   (testing "formatting time zone"
-    (is (= "235959" (format-time-zone* "23:59:59")))
-    (is (= "235900" (format-time* "23:59")))
-    (is (= "230000" (format-time* "23")))
-    (is (= "235959" (format-time* "235959")))
+    (is (= "+235959" (format-time-zone* "+23:59:59")))
+    (is (= "-230000" (format-time-zone* "-23")))
+    (is (= "Z" (format-time-zone* "Z"))))
 
-    ;; only numbers and hiphens
-    (is (thrown? Exception (format-time* "23:59-59")))
 
-    (is (thrown? Exception (format-time* "1")))
-    (is (thrown? Exception (format-time* "1")))
-    (is (thrown? Exception (format-time* "111")))
+  (testing "formatting date-time"
+    (is (= "20120530T121205+235959" (format-date-time "2012-05-30T12:12:05+23:59:59")))
+    (is (= "20120530T121205-235959" (format-date-time "2012-05-30T12:12:05-23:59:59")))
+    (is (= "20120530T121205Z" (format-date-time "2012-05-30T12:12:05Z")))
+    (is (= "20120530T121205Z" (format-date-time "2012-05-30T12:12:05")))
 
-    )
+
+    (is (= "20120501T121200+235900" (format-date-time "2012-05T12:12+23:59")))
+    (is (= "20120101T120000+230000" (format-date-time "2012T12+23")))
+
+    ;; you can add timezone without time
+    (is (thrown? Exception  (format-date-time "2012+23"))))
 
 
 

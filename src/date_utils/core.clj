@@ -170,7 +170,9 @@
                            #(format "invalid hour or minute or second values, you provided : %s" %))
           s))))
 
-(defn format-time-zone* [^String time-zone]
+(defn format-time-zone*
+  "Z or +time_value or -time_value"
+  [^String time-zone]
   (check-pattern-condition :numbers+colons+Z+plus+minus time-zone)
   (if (=  time-zone "Z")
     "Z" ;; else we dont care about these signs in   formatting time zone value +/-
@@ -187,7 +189,11 @@
   (check-pattern-condition :numbers+hyphens s)
   (format-date s))
 
-(defn format-date-time [^String s]
+(defn format-date-time
+  "your date time need date and time, otherwise use format-date
+   It works with timezones too"
+  [^String s]
+  (check-condition s #(substring? "T" %) #(format "In date-time values you need a T to separate date and time values.\n YYYY-MM-DDTHH:MM:SS or YYYYMMDDTHHMMSS" %) )
   (let [[date time] (str/split s #"T")
         date-f (format-date* date)
         time-f (format-time* (take-off-timezone time))
