@@ -239,26 +239,36 @@
    (let [dur (str/upper-case dur-)]
      (check-pattern-condition :numbers+YMDH dur)
 
-     (loop [searchs [#"\d+Y" #"\d+M" #"\d+D" #"\d+H"] m {} s "100Y5M4D3H"]
+     (re-find #"\dH" "1Y5M4D3M")
+     (str/replace "1Y5M4D3M" "5M"  "")
+     (->>
+      (loop [searchs [#"\d+Y" #"\d+M" #"\d+D" #"\d+H"] m {} s dur]
        (if-let [search (first searchs)]
          (if-let [found (re-find search s)]
-           (recur (next searchs) (assoc m (keyword(str(last found)))  (parse-int(apply str (butlast found)))) (str/replace s found ""))
+           (do
+             (when (re-find search (str/replace s found ""))
+               (throw (Exception. (format  "you have duplicated keys into dur value: %s" dur))))
+             (recur (next searchs) (assoc m (keyword(str(last found)))  (parse-int(apply str (butlast found)))) (str/replace s found ""))
+             )
            (recur (next searchs) m s))
-         [s m]
-         ))
-
-     #_(check-condition dur #(even? (count %))
-                      #(format "Duration pattern must be even following this pattern nYnMnDnH, you provided %s" %))
-
-     #_(check-condition dur #(substring? (apply str (mapv (comp str second) (partition 2 %))) "YMDH")
-                      #(format "Duration pattern is an orderer pattern nYnMnDnH, you provided %s" %))
-
-     (->>
-      (map (fn [[n t]] [(parse-int (str n)) (get {:Y tc/years :M tc/months :D tc/days :H tc/hours}
-                                                (keyword (str t)))])
-           (partition 2 dur))
+         m))
+      (map (fn [[k v]]
+             [v
+              (get {:Y tc/years :M tc/months :D tc/days :H tc/hours}
+                   k)])
+           )
       (reduce (fn [i [n t]] (assoc i t n)) {}))
      ))
+
+
+(comment
+  "snag"
+  #_(check-condition dur #(even? (count %))
+                     #(format "Duration pattern must be even following this pattern nYnMnDnH, you provided %s" %))
+
+  #_(check-condition dur #(substring? (apply str (mapv (comp str second) (partition 2 %))) "YMDH")
+                     #(format "Duration pattern is an orderer pattern nYnMnDnH, you provided %s" %)))
+
 
 (defn apply-dur-to-date [^String dur ^DateTime date]
   (let [dur-p (parse-dur* dur)]

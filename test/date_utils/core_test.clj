@@ -209,7 +209,7 @@
   (testing "parse dur"
 
     (is (= {tc/years 5} (parse-dur* "5y")))
-    (is (= {tc/years 5} (parse-dur* "50y")))
+    (is (= {tc/years 50} (parse-dur* "50y")))
     (is (= {tc/years 5
             tc/months 4} (parse-dur* "5y4M")))
     (is (= {tc/years 5
@@ -219,7 +219,7 @@
             tc/months 4
             tc/days 3
             tc/hours 5} (parse-dur* "5y4M3d5H")))
-    (is (thrown? Exception (parse-dur* "5y4M3d5H6M"))) ;; you can use other than YMDH
+    (is (thrown? Exception (parse-dur* "5y4M3d5H6M"))) ;; you can't use duplicated kes
     (is (thrown? Exception (parse-dur* "5Y4D"))) ;; should be ordered data YM
     (is (thrown? Exception (parse-dur* "5M4Y"))) ;; should be ordered data YM
     (is (thrown? Exception (parse-dur* "5Y4H4M"))) ;; should be ordered data YM
@@ -240,10 +240,12 @@
      (is (= "20170630T121205Z"
             (tf/unparse (:basic-date-time-no-ms tf/formatters)
                         (apply-dur-to-date "5y1M" date))))
-     (is (= "20170701T121205Z"
+     (is (= "20140630T121205Z"
             (tf/unparse (:basic-date-time-no-ms tf/formatters)
-                        (apply-dur-to-date "2y1M1D30H" (parse-date* "2012-05-30T12:12:05")))))
-     )
+                        (apply-dur-to-date "2y1M" date))))
+     (is (= "20140701T121205Z"
+            (tf/unparse (:basic-date-time-no-ms tf/formatters)
+                        (apply-dur-to-date "2y1M1D" date)))))
 
 
     )
