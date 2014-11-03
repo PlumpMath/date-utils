@@ -10,6 +10,11 @@
            java.util.List
            java.util.regex.Pattern))
 
+;; ************************************************
+
+;; WHY don't transform value date or time to only numbers and then try to parse ... cause we need to throw error related to user format exceptions
+
+;; ************************************************
 
 ;; The following times all refer to the same moment: "18:30Z", "22:30+04", "1130−0700", and "15:00−03:30".
 ;; Nautical time zone letters are not used with the exception of Z.
@@ -78,7 +83,7 @@
 
 (def conditions
   {:numbers {:regex #"\d+"
-             }
+             :ex-fn-message #(str "You need to use only numbers")}
    :numbers+hyphens {:regex #"[\d-]+"
                      :ex-fn-message #(str "in date format only permited numbers and hiphens")}
    :numbers+colons {:regex #"[\d:]+"
@@ -97,19 +102,21 @@
   (when-not (condition-fn value)
     (throw (Exception. (exception-message-fn value)))))
 
-(defn check-pattern-condition [{:keys [regex ex-fn-message] :as c} value]
-  (check-condition value (satisfy-pattern? regex) ex-fn-message))
+(defn check-pattern-condition
+  ([key-condition value]
+     (check-pattern-condition key-condition value (:ex-fn-message (get conditions key-condition)))
+     (let [{:keys [regex ex-fn-message]} (get conditions key-condition)]
+       (check-condition value (satisfy-pattern? regex) ex-fn-message)))
+  ([key-condition value ex-fn-message]
+     (let [{:keys [regex]} (get conditions key-condition)]
+       (check-condition value (satisfy-pattern? regex) ex-fn-message)))
+  )
 
 
 (defn validate-all-numbers [^String s]
   (= s (re-find #"\d+" s)))
-(defn validate-numbers-and-hiphens [^String s]
-  (= s (re-find #"[\d-]+" s)))
-(defn validate-numbers-and-colons [^String s]
-  (= s (re-find #"[\d:]+" s)))
 
-(defn validate-date-no-hiphens [^String s]
-  (and (contains? #{4 6 8} (count s)) (validate-all-numbers s)))
+
 (defn validate-time-no-colons [^String s]
  (and (contains? #{2 4 6} (count s)) (validate-all-numbers s)))
 
@@ -143,53 +150,58 @@
 (def date-hiphens-formatter (:date tf/formatters))
 (def date-no-hiphens-formatter (:basic-date tf/formatters))
 
+;(take-val 8 2 "2012-03-12")
 
-(defn parse-date [^String s]
-  (if (substring? "-" s )
-       (do
-         ;; if only year then it's parsed as no hiphens
-         ;; so we need only to check for year+month and year+month+day
-         "date with hiphens"
-         (let [date-values (str/split s #"\-")]
-          (condp = (count date-values)
-            2 (do
-                ;;"YYYY-MM"
-                (let [[year month] date-values]
-                  (if (and (valid-year year) (valid-month month))
-                    [date-hiphens-formatter (format "%s-%s-01" year month)]
-                    "invalid year or month values")))
-            3 (do
-                ;;"YYYY-MM-DD"
-                (let [[year month day] date-values]
-                  (if (and (valid-year year) (valid-month month) (valid-day day))
-                    [date-hiphens-formatter s]
-                    "invalid year or month or day values")))
 
-            ;; you are giving something as 2013-12-12-12-12
-            "invalid date value. Example: 2014-12-30")))
-       (if (validate-date-no-hiphens s)
-         (condp = (count s)
-           4 (do
-               ;;"YYYY"
-               (if (valid-year s)
-                 [date-no-hiphens-formatter (format "%s0101" s)]
-                 (throw (Exception. "invalid year value"))))
-           6 (do
-               ;;"YYYYMM"
-               (let [year (take-val 0 4 s)
-                     month (take-val 4 2 s)]
-                 (if (and (valid-year year) (valid-month month))
-                   [date-no-hiphens-formatter (format "%s%s01" year month)]
-                   (throw (Exception. "invalid year or month values")))))
-           8 (do
-               ;;"YYYYMMDD"
-               (let [year (take-val 0 4 s)
-                     month (take-val 4 2 s)
-                     day   (take-val 6 2 s)]
-                 (if (and (valid-year year) (valid-month month) (valid-day day))
-                   [date-no-hiphens-formatter s]
-                   (throw (Exception. "invalid year or month or day values"))))))
-         (throw (Exception. "you have invalid format date, example YYYYMMDD 20141230")))))
+(defmulti parse-date (fn [s] (if (substring? "-" s )
+                              :with-hiphens
+                              :just-numbers)))
+
+(defmethod parse-date :with-hiphens [s]
+  ;; if only year then it's parsed as no hiphens
+  ;; so we need only to check for YYYY-MM or YYYY-MM-DD
+  (check-condition s #(contains? #{7 10} (count %))
+                   #(format "Invalid date value. Example: 2014-12-30. You provided: %s" %))
+  [date-hiphens-formatter
+   (condp = (count s)
+     7 (do
+         ;;"YYYY-MM"
+         (check-condition s (fn [_] (and (valid-year (take-val 0 4 s)) (valid-month (take-val 5 2 s))))
+                          #(format "invalid year or month values, you provided : %s" %))
+         (format "%s-%s-01" (take-val 0 4 s) (take-val 5 2 s)))
+     10
+     (do
+       ;;"YYYY-MM-DD"
+       (check-condition s (fn [_] (and (valid-year (take-val 0 4 s)) (valid-month (take-val 5 2 s)) (valid-day (take-val 8 2 s))))
+                        #(format "invalid year or month or day values, you provided : %s" %))
+        s))])
+
+(defmethod parse-date :just-numbers [s]
+  (check-pattern-condition :numbers s
+                           #(format "You need to use only numeric values, example YYYYMMDD 20141230. You provided: %s" %))
+  (check-condition s #(contains? #{4 6 8} (count %))
+                   #(format "you have invalid format date, example YYYYMMDD 20141230. You provided: %s" %))
+
+  [date-no-hiphens-formatter
+   (condp = (count s)
+     4 (do
+         ;;"YYYY"
+         (check-condition #(valid-year %) #(str "invalid year value"))
+         (format "%s0101" s))
+     6 (do
+         ;;"YYYYMM"
+         (check-condition s (fn [_] (and (valid-year (take-val 0 4 s)) (valid-month (take-val 4 2 s))))
+                          #(format "invalid year or month values, you provided : %s" %))
+         (format "%s%s01" (take-val 0 4 s) (take-val 4 2 s)))
+     8 (do
+         ;;"YYYYMMDD"
+         (check-condition s (fn [_] (and (valid-year (take-val 0 4 s)) (valid-month (take-val 4 2 s)) (valid-day (take-val 6 2 s))))
+                          #(format "invalid year or month or day values, you provided : %s" %))
+         s))])
+
+(parse-date "2012-02-32")
+
+
 
 ;; An offset of zero, in addition to having the special representation "Z", can also be stated numerically as "+00:00", "+0000", or "+00". However, it is not permitted to state it numerically with a negative sign, as "−00:00", "−0000", or "−00".
 (defn take-off-timezone [^String ftime]
@@ -330,17 +342,15 @@
 
 
 
-
-(defn parse-date* [^String -s ]
-  (let [s (str/upper-case -s)]
-    (if (substring? "T" s )
-      (let [[date time] (str/split s #"T")
+(defn parse-date-time [^String s]
+  (let [[date time] (str/split s #"T")
             time-nozone (take-off-timezone time)
             time-zone (get-timezone time)]
 
-        (check-pattern-condition (conditions :numbers+hyphens) date)
-        (check-pattern-condition (conditions :numbers+colons) time-nozone)
-        (check-pattern-condition (conditions :numbers+colons+Z) time-zone)
+        (check-pattern-condition :numbers+hyphens date)
+
+        (check-pattern-condition :numbers+colons time-nozone)
+        (check-pattern-condition :numbers+colons+Z time-zone)
 
         (let [[date-formatter date-value] (parse-date date)
               [time-formater time-value] (parse-time time-nozone)]
@@ -350,11 +360,17 @@
           (validate-timezone-no-colons time)
 
           (tf/parse time-formater (format "%sT%s%s" date-value time-value time-zone))
-          ))
-      (do
-        (when-not (validate-numbers-and-hiphens s)
-          (throw (Exception. "in date format only permited numbers and hiphens")))
-        (apply tf/parse (parse-date s))))))
+          )))
+
+(defn parse-date-only [^String s]
+  (check-pattern-condition :numbers+hyphens s)
+  (apply tf/parse (parse-date s)))
+
+(defn parse-date* [^String -s ]
+  (let [s (str/upper-case -s)]
+    (if (substring? "T" s )
+      (parse-date-time s)
+      (parse-date-only s))))
 
 (parse-date* "2014-11-01T05:35:00+05")
 
@@ -370,12 +386,16 @@
 (defn parse-dur
   "Adapting String dur to this standar http://en.wikipedia.org/wiki/ISO_8601#Durations
    There is a few of String pattern validations that ensure ISO_8601
-   Result is a map with date-fn key and integer value as follows
+
+   Result is a map with 'date-fn key' and 'integer value' as follows
    (parse-dur '1Y5M4D3H')
-   => {#<core$hours clj_time.core$hours@6802bf86> 3, #<core$days clj_time.core$days@11ad1594> 4, #<core$months clj_time.core$months@26e0108a> 5, #<core$years clj_time.core$years@5527e87d> 1} "
+  => {#<core$hours clj_time.core$hours@6802bf86> 3,
+      #<core$days clj_time.core$days@11ad1594> 4,
+      #<core$months clj_time.core$months@26e0108a> 5,
+      #<core$years clj_time.core$years@5527e87d> 1}"
   [^String dur]
   (do
-    (check-pattern-condition (conditions :numbers+YMDH) dur)
+    (check-pattern-condition :numbers+YMDH dur)
 
     (check-condition dur #(even? (count %))
                      #(format "Duration pattern must be even following this pattern nYnMnDnH, you provided %s " %))
@@ -389,6 +409,8 @@
                                        (keyword (str/upper-case (str t))))])
                       (partition 2 dur))
           format-dur (reduce (fn [i [n t]] (assoc i t n)) {} parsed-dur)]
+
+      ;; TODO improve style??
      (when-not (= (count format-dur) (count parsed-dur))
        (throw (Exception. (format "Duration value can't contain duplicated keys following this pattern nYnMnDnH, you provided %s" dur))))
      format-dur)))
