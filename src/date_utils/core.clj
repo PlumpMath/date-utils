@@ -1,3 +1,6 @@
+;; The following times all refer to the same moment: "18:30Z", "22:30+04", "1130−0700", and "15:00−03:30".
+;; Nautical time zone letters are not used with the exception of Z.
+
 (ns date-utils.core
   (:require [clj-time.core   :as tc]
             [clj-time.format :as tf]
@@ -10,8 +13,10 @@
            java.util.List
            java.util.regex.Pattern))
 
-;; The following times all refer to the same moment: "18:30Z", "22:30+04", "1130−0700", and "15:00−03:30".
-;; Nautical time zone letters are not used with the exception of Z.
+
+;; the functions that are declared private caused they need prevalidation. Example only-numbers ....
+
+;; example date or time formats
 
 (defn date-example [has-hyphens?]
   (if has-hyphens?
@@ -22,6 +27,17 @@
   (if has-colons?
     "HH:MM:SS 12:59:25"
     "HHMMSS 125925"))
+
+;; UTILS
+
+(defn- take-val [start n ^String s]
+  (apply str (take n (drop start (seq s)))))
+
+(defn- parse-int [^String s]
+  (. Integer parseInt  s)
+  )
+
+;; UTILS validators
 
 (def conditions
   {:numbers {:regex #"\d+"
@@ -55,29 +71,28 @@
         (check-condition value (satisfy-pattern? regex) ex-fn-message))
       (throw (Exception. (format "You used a unexistent key pattern condition" key-condition))))))
 
-(defn- parse-int [^String s]
-  (. Integer parseInt  s)
-  )
-
 (defn valid-year [^String s]
   (let [y (parse-int s)]
     (and (> y 2000) (<= y (inc (tc/year (tc/now)))))))
+
 (defn valid-month [^String s]
   (let [m (parse-int s)]
     (and (> m 0 ) (<= m 12))))
+
 (defn valid-day [^String s]
   (let [d (parse-int s)]
     (and (> d 0 ) (<= d 31))))
+
 (defn valid-hour [^String s]
   (let [m (parse-int s)]
     (and (>= m 0 ) (< m 24))))
+
 (defn valid-minute [^String s]
   (let [m (parse-int s)]
     (and (>= m 0 ) (< m 60))))
 
-(defn- take-val [start n ^String s]
-  (apply str (take n (drop start (seq s)))))
 
+;; DATE FNs
 (defn- format-date [^String raw-s]
    (let [d-e (date-example (substring?  "-" raw-s))
         s (str/replace raw-s #"-" "")]
@@ -104,9 +119,8 @@
                            #(format "invalid year or month or day values, you provided : %s" %))
           s))))
 
-;;;; TIME RELATED CODE
 
-;; An offset of zero, in addition to having the special representation "Z", can also be stated numerically as "+00:00", "+0000", or "+00". However, it is not permitted to state it numerically with a negative sign, as "−00:00", "−0000", or "−00".
+;;;; TIME FNs
 (defn- take-off-timezone [^String ftime]
   (cond
    (substring? "Z" ftime) (do
@@ -151,7 +165,7 @@
                              (fn [s] (format "You need to use only numeric values, example %s. You provided: %s" t-e s)))
 
     (check-condition s #(contains? #{2 4 6} (count %))
-                     (fn [s] (format "you have invalid format date, example %s. You provided: %s" t-e s)))
+                     (fn [s] (format "You have invalid format time, example %s. You provided: %s" t-e s)))
 
     (condp = (count s)
       2(do
@@ -193,7 +207,8 @@
   "your date time need date and time, otherwise use format-date
    It works with timezones too"
   [^String s]
-  (check-condition s #(substring? "T" %) #(format "In date-time values you need a T to separate date and time values.\n YYYY-MM-DDTHH:MM:SS or YYYYMMDDTHHMMSS" %) )
+  (check-condition s #(substring? "T" %)
+                   #(format "In date-time values you need a T to separate date and time values.\n YYYY-MM-DDTHH:MM:SS or YYYYMMDDTHHMMSS" %) )
   (let [[date time] (str/split s #"T")
         date-f (format-date* date)
         time-f (format-time* (take-off-timezone time))
@@ -209,10 +224,7 @@
                 (format-date-time s))
       (tf/parse (:basic-date tf/formatters) (format-date* s)))))
 
-(parse-date* "2014-11-01T05:35:00+05")
-(parse-date* "20141101T053000+10")
-
-(defn parse-dur
+(defn parse-dur*
   "Adapting String dur to this standar
   http://en.wikipedia.org/wiki/ISO_8601#Durations There is a few of
   String pattern validations that ensure ISO_8601
@@ -223,29 +235,33 @@
       #<core$days clj_time.core$days@11ad1594> 4,
       #<core$monthsclj_time.core$months@26e0108a> 5,
       #<core$years clj_time.core$years@5527e87d> 1}"
-  [^String dur]
-   (do
+  [^String dur-]
+   (let [dur (str/upper-case dur-)]
      (check-pattern-condition :numbers+YMDH dur)
 
-     (check-condition dur #(even? (count %))
+     (loop [searchs [#"\d+Y" #"\d+M" #"\d+D" #"\d+H"] m {} s "100Y5M4D3H"]
+       (if-let [search (first searchs)]
+         (if-let [found (re-find search s)]
+           (recur (next searchs) (assoc m (keyword(str(last found)))  (parse-int(apply str (butlast found)))) (str/replace s found ""))
+           (recur (next searchs) m s))
+         [s m]
+         ))
+
+     #_(check-condition dur #(even? (count %))
                       #(format "Duration pattern must be even following this pattern nYnMnDnH, you provided %s" %))
 
-     (check-condition dur #(substring? (apply str (mapv (comp str second) (partition 2 %))) "YMDH")
+     #_(check-condition dur #(substring? (apply str (mapv (comp str second) (partition 2 %))) "YMDH")
                       #(format "Duration pattern is an orderer pattern nYnMnDnH, you provided %s" %))
 
-     (let [parsed-dur (map (fn [[n t]] [(parse-int (str n)) (get {:Y tc/years :M tc/months :D tc/days :H tc/hours}
-                                                                (keyword (str/upper-case (str t))))])
-                           (partition 2 dur))
-           format-dur (reduce (fn [i [n t]] (assoc i t n)) {} parsed-dur)]
-
-       (check-condition dur (fn [_] (= (count format-dur) (count parsed-dur)))
-                        #(format "Duration value can't contain duplicated keys following this pattern nYnMnDnH, you provided %s" %))
-       format-dur)))
+     (->>
+      (map (fn [[n t]] [(parse-int (str n)) (get {:Y tc/years :M tc/months :D tc/days :H tc/hours}
+                                                (keyword (str t)))])
+           (partition 2 dur))
+      (reduce (fn [i [n t]] (assoc i t n)) {}))
+     ))
 
 (defn apply-dur-to-date [^String dur ^DateTime date]
-  (let [format-dur (parse-dur dur)]
-    (apply tc/plus (conj (map (fn [[f n]] (f n)) format-dur) date))))
+  (let [dur-p (parse-dur* dur)]
+    (reduce (fn [d [f n]] (tc/plus d (f n))) date dur-p)))
 
-(parse-dur "1Y5M4D3H")
-(apply-dur-to-date "1Y5M4D3H" (tc/now))
-(apply-dur-to-date "0H" (tc/now))
+(reduce #(conj % (str %2) ) [] (range 5))
