@@ -57,16 +57,3 @@
 
 ;; only works Z
 (tf/parse (:date-time-no-ms tf/formatters) "2014-12-02T00:05:00Z")
-
-
-
-
-
-(deftest define-new-api
-  ".... defining new api for querying messages by date"
-
-  (testing "....more..."
-
-    (is (= 1 1))
-    )
-  )
