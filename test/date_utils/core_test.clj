@@ -218,19 +218,32 @@
     (is (= {tc/years 5
             tc/months 4
             tc/days 3
-            tc/hours 5} (parse-dur* "5y4M3d5H")))
-    (is (thrown? Exception (parse-dur* "5y4M3d5H6M"))) ;; you can't use duplicated kes
-    (is (thrown? Exception (parse-dur* "5Y4D"))) ;; should be ordered data YM
-    (is (thrown? Exception (parse-dur* "5M4Y"))) ;; should be ordered data YM
-    (is (thrown? Exception (parse-dur* "5Y4H4M"))) ;; should be ordered data YM
-    (is (thrown? Exception (parse-dur* "5Y4M4H4D"))) ;; should be ordered data YM
+            } (parse-dur* "5y4M3d")))
+
+    (is (= {tc/weeks 50} (parse-dur* "50W")))
+    (is (= {tc/hours 10} (parse-dur* "T10H")))
+    (is (= {tc/hours 10
+            tc/minutes 20
+            tc/seconds 30} (parse-dur* "T10H20M30S")))
+    (is (= {tc/years 5
+            tc/months 4
+            tc/days 3
+            tc/hours 10
+            tc/minutes 20
+            tc/seconds 30
+            } (parse-dur* "5y4M3dT10H20M30S")))
+
+
+    (is (thrown? Exception (parse-dur* "5y4M3"))) ;; incomplete value
     (is (thrown? Exception (parse-dur* "5Y4M5M"))) ;; duplicated keys is unordered data too
 
     )
 
 
   (testing "applying dur to date"
-    (let [date (parse-date* "2012-05-30T12:12:05")]
+    (let [date (parse-date* "2012-05-30T12:12:05")
+          date-1 (parse-date* "2012-05-01T12:12:05")
+          ]
      (is (= "20170530T121205Z"
             (tf/unparse (:basic-date-time-no-ms tf/formatters)
                         (apply-dur-to-date "5y" date))))
@@ -245,12 +258,25 @@
                         (apply-dur-to-date "2y1M" date))))
      (is (= "20140701T121205Z"
             (tf/unparse (:basic-date-time-no-ms tf/formatters)
-                        (apply-dur-to-date "2y1M1D" date)))))
+                        (apply-dur-to-date "2y1M1D" date))))
+     (is (= "20140702T121205Z"
+            (tf/unparse (:basic-date-time-no-ms tf/formatters)
+                        (apply-dur-to-date "2y1M2D" date))))
 
+     (is (= "20120530T121235Z"
+            (tf/unparse (:basic-date-time-no-ms tf/formatters)
+                        (apply-dur-to-date "T30S" date))))
+     (is (= "20120530T124235Z"
+            (tf/unparse (:basic-date-time-no-ms tf/formatters)
+                        (apply-dur-to-date "T30M30S" date))))
 
-    )
+     (is (= "20120530T224235Z"
+            (tf/unparse (:basic-date-time-no-ms tf/formatters)
+                        (apply-dur-to-date "T10H30M30S" date))))
 
-  )
-
-;;(apply-dur-to-date "1Y5M4D3H" (tc/now))
-;;(apply-dur-to-date "0H" (tc/now))
+     (is (= "20120531T224235Z"
+            (tf/unparse (:basic-date-time-no-ms tf/formatters)
+                        (apply-dur-to-date "1DT10H30M30S" date))))
+     (is (= "20120602T224235Z"
+            (tf/unparse (:basic-date-time-no-ms tf/formatters)
+                        (apply-dur-to-date "1M1DT10H30M30S" date-1)))))))

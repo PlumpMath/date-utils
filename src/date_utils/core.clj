@@ -49,7 +49,11 @@
    :numbers+colons+Z+plus+minus {:regex #"[Z\d:\+-]+"
                       :ex-fn-message #(format  "In time-zone format only permited letter 'Z', numbers and colons. You provided: " %)}
    :numbers+YMDH {:regex #"[\d[YMDH]]+"
-                  :ex-fn-message #(format "Duration pattern only can contain unsigned numbers and these letters 'YMDH' as this pattern nYnMnDnH, you provided %s" %)}})
+                  :ex-fn-message #(format "Duration date pattern only can contain unsigned numbers and these letters 'YMDH' as this pattern nYnMnDnH, you provided %s" %)}
+   :numbers+W {:regex #"[\d[W]]+"
+               :ex-fn-message #(format "Duration week pattern only can contain unsigned numbers and 'W' as this pattern nW, you provided %s" %)}
+   :numbers+HMS {:regex #"[\d[HMS]]+"
+                 :ex-fn-message #(format "Duration time pattern only can contain unsigned numbers and these letters 'HMS' as this pattern nHnMnS, you provided %s" %)}})
 
 (defn- substring? [^String sub ^String st]
   (not= (.indexOf st sub) -1))
@@ -224,7 +228,7 @@
                 (format-date-time s))
       (tf/parse (:basic-date tf/formatters) (format-date* s)))))
 
-(defn parse-dur*
+(defn- parse-dur
   "Adapting String dur to this standar
   http://en.wikipedia.org/wiki/ISO_8601#Durations There is a few of
   String pattern validations that ensure ISO_8601
@@ -235,43 +239,55 @@
       #<core$days clj_time.core$days@11ad1594> 4,
       #<core$monthsclj_time.core$months@26e0108a> 5,
       #<core$years clj_time.core$years@5527e87d> 1}"
-  [^String dur-]
-   (let [dur (str/upper-case dur-)]
-     (check-pattern-condition :numbers+YMDH dur)
+  [type dur search-col date-fns-map]
+  (->>
+   (loop [searchs search-col m {} s dur]
+     (if-let [search (first searchs)]
+       (if-let [found (re-find search s)]
+         (do
+           (when (re-find search (str/replace s found ""))
+             (throw (Exception. (format  "you have duplicated keys into dur value: %s" dur))))
+           (recur (next searchs)
+                  (assoc m (keyword(str(last found))) (parse-int(apply str (butlast found))))
+                  (str/replace s found "")))
+         (recur (next searchs) m s))
+       (do
+         (when-not (empty? s)
+           (throw (Exception. (format  "your duration value doesn't adapt to ISO duration %s: %s." type dur ))))
+         m)))
+   (map (fn [[k v]]
+          [v (get date-fns-map k)]))
+   (reduce (fn [i [n t]] (assoc i t n)) {}))
+  )
 
-     (re-find #"\dH" "1Y5M4D3M")
-     (str/replace "1Y5M4D3M" "5M"  "")
-     (->>
-      (loop [searchs [#"\d+Y" #"\d+M" #"\d+D" #"\d+H"] m {} s dur]
-       (if-let [search (first searchs)]
-         (if-let [found (re-find search s)]
-           (do
-             (when (re-find search (str/replace s found ""))
-               (throw (Exception. (format  "you have duplicated keys into dur value: %s" dur))))
-             (recur (next searchs) (assoc m (keyword(str(last found)))  (parse-int(apply str (butlast found)))) (str/replace s found ""))
-             )
-           (recur (next searchs) m s))
-         m))
-      (map (fn [[k v]]
-             [v
-              (get {:Y tc/years :M tc/months :D tc/days :H tc/hours}
-                   k)])
-           )
-      (reduce (fn [i [n t]] (assoc i t n)) {}))
-     ))
+(defn- parse-dur-time [dur]
+  (check-pattern-condition :numbers+HMS dur)
+  (parse-dur :time dur [#"\d+H" #"\d+M" #"\d+S"] {:H tc/hours :M tc/minutes :S tc/seconds}))
+
+(defn- parse-dur-date [dur]
+  (check-pattern-condition :numbers+YMDH dur)
+  (parse-dur :date dur [#"\d+Y" #"\d+M" #"\d+D"] {:Y tc/years :M tc/months :D tc/days})
+  )
+
+(defn- parse-dur-week [dur]
+  (check-pattern-condition :numbers+W dur)
+  (parse-dur :week dur [#"\d+W"] {:W tc/weeks}))
+
+;; TODO: ISO limitation to apply::
+;; However, individual date and time values cannot exceed their moduli (e.g. a value of 13 for the month or 25 for the hour would not be permissible)
+
+(defn parse-dur* [dur-]
+  (let [dur (str/upper-case dur-)]
+    (if (substring? "W" dur)
+      (parse-dur-week  dur)
+      (if-not (substring? "T" dur)
+        (parse-dur-date dur)
+        (let [[date time] (str/split dur #"T")]
+          (merge {} (when-not (empty? date) (parse-dur-date date))
+                  (parse-dur-time time)))))))
 
 
-(comment
-  "snag"
-  #_(check-condition dur #(even? (count %))
-                     #(format "Duration pattern must be even following this pattern nYnMnDnH, you provided %s" %))
-
-  #_(check-condition dur #(substring? (apply str (mapv (comp str second) (partition 2 %))) "YMDH")
-                     #(format "Duration pattern is an orderer pattern nYnMnDnH, you provided %s" %)))
-
-
+;; TODO: when apply dur to date should we order this values before applying them?
 (defn apply-dur-to-date [^String dur ^DateTime date]
   (let [dur-p (parse-dur* dur)]
     (reduce (fn [d [f n]] (tc/plus d (f n))) date dur-p)))
-
-(reduce #(conj % (str %2) ) [] (range 5))
