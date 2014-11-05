@@ -228,9 +228,10 @@
                 (format-date-time s))
       (tf/parse (:basic-date tf/formatters) (format-date* s)))))
 
-(defn apply-dur-to-date [^String dur ^DateTime date]
-  (.plus date
-   (try
-     (.parsePeriod (ISOPeriodFormat/standard) (if-not (substring? "P" dur) (str "P" dur) dur))
-     (catch IllegalArgumentException e
-       (throw (Exception. (str "Your duration value is not compliant with http://en.wikipedia.org/wiki/ISO_8601#Durations \n" (.getMessage e))))))))
+(defn apply-dur-to-date [^String dur- ^DateTime date]
+  (let [dur (str/upper-case dur-)]
+    (.plus date
+           (try
+             (.parsePeriod (ISOPeriodFormat/standard) (if-not (substring? "P" dur) (str "P" dur) dur))
+             (catch IllegalArgumentException e
+               (throw (Exception. (str "Your duration value is not compliant with http://en.wikipedia.org/wiki/ISO_8601#Durations \n" (.getMessage e)))))))))
