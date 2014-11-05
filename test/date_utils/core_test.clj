@@ -206,40 +206,6 @@
     )
 
 
-  (testing "parse dur"
-
-    (is (= {tc/years 5} (parse-dur* "5y")))
-    (is (= {tc/years 50} (parse-dur* "50y")))
-    (is (= {tc/years 5
-            tc/months 4} (parse-dur* "5y4M")))
-    (is (= {tc/years 5
-            tc/months 4
-            tc/days 3} (parse-dur* "5y4M3d")))
-    (is (= {tc/years 5
-            tc/months 4
-            tc/days 3
-            } (parse-dur* "5y4M3d")))
-
-    (is (= {tc/weeks 50} (parse-dur* "50W")))
-    (is (= {tc/hours 10} (parse-dur* "T10H")))
-    (is (= {tc/hours 10
-            tc/minutes 20
-            tc/seconds 30} (parse-dur* "T10H20M30S")))
-    (is (= {tc/years 5
-            tc/months 4
-            tc/days 3
-            tc/hours 10
-            tc/minutes 20
-            tc/seconds 30
-            } (parse-dur* "5y4M3dT10H20M30S")))
-
-
-    (is (thrown? Exception (parse-dur* "5y4M3"))) ;; incomplete value
-    (is (thrown? Exception (parse-dur* "5Y4M5M"))) ;; duplicated keys is unordered data too
-
-    )
-
-
   (testing "applying dur to date"
     (let [date (parse-date* "2012-05-30T12:12:05")
           date-1 (parse-date* "2012-05-01T12:12:05")

@@ -10,9 +10,9 @@
   (:import org.joda.time.format.DateTimeFormatter
            org.joda.time.DateTime
            org.joda.time.DateTimeZone
+           org.joda.time.format.ISOPeriodFormat
            java.util.List
            java.util.regex.Pattern))
-
 
 ;; the functions that are declared private caused they need prevalidation. Example only-numbers ....
 
@@ -228,66 +228,9 @@
                 (format-date-time s))
       (tf/parse (:basic-date tf/formatters) (format-date* s)))))
 
-(defn- parse-dur
-  "Adapting String dur to this standar
-  http://en.wikipedia.org/wiki/ISO_8601#Durations There is a few of
-  String pattern validations that ensure ISO_8601
-
-  Result is a map with 'date-fn key' and 'integer value' as follows
-  (parse-dur '1Y5M4D3H')
-  => {#<core$hours clj_time.core$hours@6802bf86> 3,
-      #<core$days clj_time.core$days@11ad1594> 4,
-      #<core$monthsclj_time.core$months@26e0108a> 5,
-      #<core$years clj_time.core$years@5527e87d> 1}"
-  [type dur search-col date-fns-map]
-  (->>
-   (loop [searchs search-col m {} s dur]
-     (if-let [search (first searchs)]
-       (if-let [found (re-find search s)]
-         (do
-           (when (re-find search (str/replace s found ""))
-             (throw (Exception. (format  "you have duplicated keys into dur value: %s" dur))))
-           (recur (next searchs)
-                  (assoc m (keyword(str(last found))) (parse-int(apply str (butlast found))))
-                  (str/replace s found "")))
-         (recur (next searchs) m s))
-       (do
-         (when-not (empty? s)
-           (throw (Exception. (format  "your duration value doesn't adapt to ISO duration %s: %s." type dur ))))
-         m)))
-   (map (fn [[k v]]
-          [v (get date-fns-map k)]))
-   (reduce (fn [i [n t]] (assoc i t n)) {}))
-  )
-
-(defn- parse-dur-time [dur]
-  (check-pattern-condition :numbers+HMS dur)
-  (parse-dur :time dur [#"\d+H" #"\d+M" #"\d+S"] {:H tc/hours :M tc/minutes :S tc/seconds}))
-
-(defn- parse-dur-date [dur]
-  (check-pattern-condition :numbers+YMDH dur)
-  (parse-dur :date dur [#"\d+Y" #"\d+M" #"\d+D"] {:Y tc/years :M tc/months :D tc/days})
-  )
-
-(defn- parse-dur-week [dur]
-  (check-pattern-condition :numbers+W dur)
-  (parse-dur :week dur [#"\d+W"] {:W tc/weeks}))
-
-;; TODO: ISO limitation to apply::
-;; However, individual date and time values cannot exceed their moduli (e.g. a value of 13 for the month or 25 for the hour would not be permissible)
-
-(defn parse-dur* [dur-]
-  (let [dur (str/upper-case dur-)]
-    (if (substring? "W" dur)
-      (parse-dur-week  dur)
-      (if-not (substring? "T" dur)
-        (parse-dur-date dur)
-        (let [[date time] (str/split dur #"T")]
-          (merge {} (when-not (empty? date) (parse-dur-date date))
-                  (parse-dur-time time)))))))
-
-
-;; TODO: when apply dur to date should we order this values before applying them?
 (defn apply-dur-to-date [^String dur ^DateTime date]
-  (let [dur-p (parse-dur* dur)]
-    (reduce (fn [d [f n]] (tc/plus d (f n))) date dur-p)))
+  (.plus date
+   (try
+     (.parsePeriod (ISOPeriodFormat/standard) (if-not (substring? "P" dur) (str "P" dur) dur))
+     (catch IllegalArgumentException e
+       (throw (Exception. (str "Your duration value is not compliant with http://en.wikipedia.org/wiki/ISO_8601#Durations \n" (.getMessage e))))))))
